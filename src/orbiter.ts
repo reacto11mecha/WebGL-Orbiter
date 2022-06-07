@@ -1,5 +1,4 @@
 import * as THREE from "three/src/Three";
-import { io, Socket } from "socket.io-client";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import Stats from "three/examples/jsm/libs/stats.module.js";
 
@@ -59,26 +58,7 @@ let buttons = new RotationButtons();
 let accelerate = false;
 let decelerate = false;
 
-interface ServerToClientEvents {
-  noArg: () => void;
-  basicEmit: (a: number, b: string, c: Buffer) => void;
-  withAck: (d: string, callback: (e: number) => void) => void;
-}
-
-interface ClientToServerEvents {
-  tlm: (params: {
-    velocity: number;
-    altitude: number;
-    timescale: number;
-    throttle: number;
-    simTime: Date;
-    rotation: { x: number; y: number; z: number };
-  }) => void;
-}
-
-const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(
-  "http://localhost:3000/"
-);
+let websock = new WebSocket("ws://localhost:3000/telemetry");
 
 function init() {
   container = document.createElement("div");
@@ -516,27 +496,26 @@ function render() {
       select_obj.position.length() * AU - select_obj.getParent().radius
     );
   } else altitudeControl.setText(0);
-  
 
-  socket.emit("tlm", {
-    velocity: parseFloat(
-      (gameState.universe.rocket.velocity.length() * AU).toFixed(4)
-    ),
-    altitude: parseFloat(
-      (
-        gameState.universe.rocket.position.length() * AU -
-        gameState.universe.rocket.getParent().radius
-      ).toFixed(4)
-    ),
-    timescale: gameState.timescale,
-    simTime: gameState.simTime,
-    throttle: gameState.universe.rocket.throttle,
-    rotation: {
-      x: gameState.universe.rocket.model.rotation.x,
-      y: gameState.universe.rocket.model.rotation.y,
-      z: gameState.universe.rocket.model.rotation.z,
-    },
-  });
+  if (websock && websock.readyState === 1)
+    websock.send(
+      JSON.stringify({
+        velocity: gameState.universe.rocket.velocity.length() * AU,
+        altitude:
+          gameState.universe.rocket.position.length() * AU -
+          gameState.universe.rocket.getParent().radius,
+        timescale: gameState.timescale,
+        simTime: gameState.simTime,
+        realTime: gameState.realTime,
+        throttle: gameState.universe.rocket.throttle,
+        rotation: {
+          x: gameState.universe.rocket.model.rotation.x,
+          y: gameState.universe.rocket.model.rotation.y,
+          z: gameState.universe.rocket.model.rotation.z,
+        },
+        orbitalElements: gameState.universe.rocket.orbitalElements,
+      })
+    );
 }
 
 function onKeyDown(event: KeyboardEvent) {
